@@ -1,21 +1,21 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Garbage Man: Ultimate Street</title>
+    <title>Garbage Man: Ultimate Stability</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { margin: 0; background: #05050a; overflow: hidden; font-family: 'Courier New', monospace; touch-action: none; color: white; }
-        canvas { display: block; position: fixed; top: 0; left: 0; z-index: 1; }
+        canvas { display: block; position: fixed; top: 0; left: 0; z-index: 1; width: 100vw; height: 100vh; }
         #title-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a1a; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         #start-btn { background: #f00; color: white; border: 4px solid #fff; padding: 20px 40px; font-size: 24px; font-weight: bold; border-radius: 50px; cursor: pointer; box-shadow: 0 0 20px red; }
         #ui { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 8px; border: 1px solid #0f0; z-index: 30; border-radius: 8px; width: 210px; }
         #radio-screen { width: 200px; height: 60px; background: #000; margin-top: 5px; border: 1px solid #444; overflow: hidden; }
         .controls { position: fixed; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; z-index: 20; align-items: flex-end; pointer-events: none; }
         .btn, #wheel-container { pointer-events: auto; }
-        #wheel-container { width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; }
-        #wheel { width: 110px; height: 110px; border: 8px solid #555; border-radius: 50%; position: relative; background: radial-gradient(circle, #111 25%, transparent 26%); }
+        #wheel-container { width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; }
+        #wheel { width: 100px; height: 100px; border: 8px solid #555; border-radius: 50%; position: relative; background: radial-gradient(circle, #111 25%, transparent 26%); }
         #wheel::after { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 8px; background: #555; margin-top: -4px; }
-        .btn { width: 65px; height: 65px; background: rgba(255,255,255,0.1); border: 2px solid white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; }
+        .btn { width: 60px; height: 60px; background: rgba(255,255,255,0.1); border: 2px solid white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; }
     </style>
 </head>
 <body onclick="unlockAudio()">
@@ -33,7 +33,7 @@
 
 <canvas id="gameCanvas"></canvas>
 
-<div class="controls">
+<div class="controls" id="control-bar">
     <div id="wheel-container"><div id="wheel"></div></div>
     <div style="display:flex; gap:8px;">
         <div class="btn" id="gas" style="background:rgba(255,0,0,0.5)">GAS</div>
@@ -46,14 +46,11 @@
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
 
-let GROUND_Y = canvas.height - 250; 
 let stage = 1, health = 100, squashes = 0, gear = 0, gameStarted = false;
-let player = { x: canvas.width/2, y: 100, w: 60, h: 30, dy: 0, speed: 0, targetSpeed: 0, jumped: false };
+let player = { x: 0, y: 0, w: 60, h: 30, dy: 0, speed: 0, targetSpeed: 0, jumped: false };
 let enemies = [], bags = [], buildings = [], stars = [], spikes = [], lights = [];
-let spawnTimer = 0, bgX = 0, moonX = canvas.width - 80, boss = null;
+let spawnTimer = 0, bgX = 0, moonX = 0, boss = null;
 
 const PLAYLIST_ID = "PLVWEzQMtQoqNxUszzfO0k3lDy_UxddjYy";
 
@@ -65,12 +62,12 @@ function onYouTubeIframeAPIReady() {
 }
 
 function startGame() {
-    // Re-calc screen dimensions just in case
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    GROUND_Y = canvas.height - 250;
-    player.y = GROUND_Y - 50; // Force player to road height
-    
+    player.x = canvas.width / 2 - 30;
+    const ground = canvas.height - 220;
+    player.y = ground - 30; 
+    moonX = canvas.width - 80;
     document.getElementById('title-screen').style.display = 'none';
     gameStarted = true;
     if(window.ytPlayer && window.ytPlayer.playVideo) { window.ytPlayer.unMute(); window.ytPlayer.playVideo(); }
@@ -79,20 +76,31 @@ function startGame() {
 
 function unlockAudio() { if(window.ytPlayer) { window.ytPlayer.unMute(); window.ytPlayer.playVideo(); } }
 
+// STEERING FIX
 const wheelCont = document.getElementById('wheel-container');
 const wheelEl = document.getElementById('wheel');
 wheelCont.addEventListener('touchmove', (e) => {
     const rect = wheelCont.getBoundingClientRect();
-    const angle = Math.atan2(e.touches.clientY - (rect.top + 70), e.touches.clientX - (rect.left + 70));
+    const angle = Math.atan2(e.touches[0].clientY - (rect.top + rect.height/2), e.touches[0].clientX - (rect.left + rect.width/2));
     wheelEl.style.transform = `rotate(${angle}rad)`;
-    player.x += Math.cos(angle) * 12;
+    
+    // Smooth boundary-locked steering
+    let move = Math.cos(angle) * 15;
+    if (player.x + move > 0 && player.x + move < canvas.width - player.w) {
+        player.x += move;
+    }
 }, {passive: false});
 
 const setup = (id) => {
     document.getElementById(id).addEventListener('touchstart', (e) => {
         e.preventDefault();
         if(id === 'gas') { gear = (gear + 1) % 4; player.targetSpeed = gear * 7; }
-        if(id === 'jump' && stage !== 2) { if(!player.jumped){ player.dy = -14; player.jumped = true; } }
+        if(id === 'jump' && stage !== 2) { 
+            if(!player.jumped){ 
+                player.dy = -10; // Light, floaty jump
+                player.jumped = true; 
+            } 
+        }
         if(id === 'drop') {
             bags.push({ x: player.x+20, y: player.y+(stage===2?60:10), w: 15, h: 15, vy: (stage===2?12:-6), sx: (stage!==2?-player.speed:0) });
         }
@@ -100,42 +108,53 @@ const setup = (id) => {
 };
 ['gas','jump','drop'].forEach(setup);
 
-for(let i=0; i<40; i++) stars.push({x:Math.random()*canvas.width, y:Math.random()*200, s:Math.random()*2});
+for(let i=0; i<40; i++) stars.push({x:Math.random()*2000, y:Math.random()*300, s:Math.random()*2});
 for(let i=0; i<12; i++) { buildings.push({x:i*300, w:120, h:120+Math.random()*150}); lights.push({x:i*450}); }
 
 function update() {
     if(!gameStarted) return;
+    
+    const groundY = canvas.height - 220; 
+    
     player.speed += (player.targetSpeed - player.speed) * 0.05;
-    player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
 
     if(stage === 1 || stage === 3) {
         player.y += player.dy;
-        if(player.y + player.h < GROUND_Y) player.dy += 0.8;
-        else { player.y = GROUND_Y - player.h; player.dy = 0; player.jumped = false; }
         
-        // Safety Reset if player falls below bottom
-        if (player.y > canvas.height) player.y = GROUND_Y - player.h;
+        // Gravity logic
+        if(player.y + player.h < groundY) {
+            player.dy += 0.4; // Very light gravity
+        } else {
+            player.y = groundY - player.h;
+            player.dy = 0;
+            player.jumped = false;
+        }
 
+        // ABSOLUTE SAFETY ANCHOR
+        if (player.y < 0) player.y = 0; 
+        if (player.y > canvas.height) player.y = groundY - player.h;
+        
         bgX -= player.speed * 0.5;
         moonX -= player.speed * 0.02;
 
         if(stage === 3) {
             document.getElementById('boss-ui').style.display = 'inline';
-            if(!boss) boss = { x: canvas.width, y: 60, w: 140, h: 45, hp: 15, dir: -1 };
+            if(!boss) boss = { x: canvas.width, y: 120, w: 140, h: 45, hp: 15, dir: -1 };
             boss.x += (boss.dir * (3 + (15-boss.hp)*0.3));
             if(boss.x < 10 || boss.x > canvas.width - 150) boss.dir *= -1;
             if(++spawnTimer > 80) { spikes.push({x: boss.x + 60, y: boss.y + 40}); spawnTimer = 0; }
             document.getElementById('bhp').innerText = boss.hp;
             bags.forEach((b, bi) => {
-                if(b.x < boss.x+boss.w && b.x+b.w > boss.x && b.y < boss.y+boss.h && b.y+b.h > boss.y) { boss.hp--; bags.splice(bi, 1); if(boss.hp <= 0) { alert("MISSION COMPLETE!"); location.reload(); } }
+                if(b.x < boss.x+boss.w && b.x+b.w > boss.x && b.y < boss.y+boss.h && b.y+b.h > boss.y) { boss.hp--; bags.splice(bi, 1); if(boss.hp <= 0) { alert("POLICE ESCAPED!"); location.reload(); } }
             });
         } else {
-            if(++spawnTimer > 110) { enemies.push({x: canvas.width+50, y: GROUND_Y-30, w: 55, h: 30, c: '#f0f'}); spawnTimer = 0; }
+            if(++spawnTimer > 110) { enemies.push({x: canvas.width+50, y: groundY-30, w: 55, h: 30, c: '#f0f'}); spawnTimer = 0; }
         }
         enemies.forEach((en, i) => {
             en.x -= (player.speed + 2.5);
             if(player.x < en.x+en.w && player.x+player.w > en.x && player.y < en.y+en.h && player.y+player.h > en.y) {
-                if(player.dy > 0 && player.y + player.h < en.y + 15) { enemies.splice(i,1); player.dy = -10; squashes++; } else { health -= 10; enemies.splice(i,1); }
+                if(player.dy > 0 && player.y + player.h < en.y + 15) { enemies.splice(i,1); player.dy = -8; squashes++; } 
+                else { health -= 10; enemies.splice(i,1); }
             }
         });
         if(stage === 1 && squashes >= 10) { stage = 2; player.w = 30; player.h = 60; enemies = []; }
@@ -147,8 +166,10 @@ function update() {
         });
         if(squashes >= 20) { stage = 3; player.w = 60; player.h = 30; enemies = []; }
     }
+
     bags.forEach((b, i) => { b.y += b.vy; b.x += b.sx; if(b.y > canvas.height+100 || b.y < -200) bags.splice(i,1); });
     spikes.forEach((s, i) => { s.y += 7; s.x -= player.speed * 0.5; if(player.x < s.x+20 && player.x+20 > s.x && player.y < s.y+20 && player.y+20 > s.y) { health -= 15; spikes.splice(i,1); } });
+    
     document.getElementById('hp').innerText = health;
     document.getElementById('stg').innerText = stage;
     document.getElementById('sq').innerText = squashes;
@@ -159,26 +180,30 @@ function update() {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const groundY = canvas.height - 220;
+    
     ctx.fillStyle = "white";
     stars.forEach(s => ctx.fillRect((s.x - bgX*0.1)%canvas.width, s.y, s.s, s.s));
     ctx.beginPath(); ctx.arc(moonX % (canvas.width+200), 80, 30, 0, Math.PI*2); ctx.fill();
+
     if(stage !== 2) {
         buildings.forEach(b => {
             let bx = (b.x + bgX) % (buildings.length * 300); if(bx < -150) bx += buildings.length * 300;
-            ctx.fillStyle = '#444'; ctx.fillRect(bx, GROUND_Y - b.h, b.w, b.h);
-            ctx.fillStyle = '#ff0'; for(let r=0; r<b.h/25; r++) for(let c=0; c<b.w/25; c++) if((r+c)%3===0) ctx.fillRect(bx+10+c*25, GROUND_Y-b.h+10+r*25, 6, 6);
+            ctx.fillStyle = '#444'; ctx.fillRect(bx, groundY - b.h, b.w, b.h);
+            ctx.fillStyle = '#ff0'; for(let r=0; r<b.h/25; r++) for(let c=0; c<b.w/25; c++) if((r+c)%3===0) ctx.fillRect(bx+10+c*25, groundY-b.h+10+r*25, 6, 6);
         });
         lights.forEach(sl => {
             let sx = (sl.x + bgX) % (buildings.length * 450); if(sx < -50) sx += buildings.length * 450;
-            ctx.fillStyle = '#888'; ctx.fillRect(sx, GROUND_Y-120, 4, 120);
-            ctx.fillStyle = 'rgba(255, 255, 100, 0.15)'; ctx.beginPath(); ctx.moveTo(sx, GROUND_Y-120); ctx.lineTo(sx-45, GROUND_Y); ctx.lineTo(sx+45, GROUND_Y); ctx.fill();
+            ctx.fillStyle = '#888'; ctx.fillRect(sx, groundY-120, 4, 120);
+            ctx.fillStyle = 'rgba(255, 255, 100, 0.15)'; ctx.beginPath(); ctx.moveTo(sx, groundY-120); ctx.lineTo(sx-45, groundY); ctx.lineTo(sx+45, groundY); ctx.fill();
         });
-        ctx.strokeStyle = '#666'; ctx.lineWidth = 1; for(let i=0; i<30; i++) ctx.strokeRect((i*80 + bgX * 1.2) % canvas.width, GROUND_Y - 25, 80, 25);
-        ctx.fillStyle = '#111'; ctx.fillRect(0, GROUND_Y, canvas.width, 250);
+        ctx.strokeStyle = '#666'; ctx.lineWidth = 1; for(let i=0; i<30; i++) ctx.strokeRect((i*80 + bgX * 1.2) % canvas.width, groundY - 25, 80, 25);
+        ctx.fillStyle = '#111'; ctx.fillRect(0, groundY, canvas.width, 220);
     } else {
         ctx.fillStyle = '#151515'; ctx.fillRect(0,0,canvas.width,canvas.height);
         for(let i=0; i<10; i++) { ctx.fillStyle='#444'; ctx.fillRect(canvas.width/2-5, (Date.now()/5%100)+i*100, 10, 40); }
     }
+
     if(boss) { 
         ctx.fillStyle = '#003366'; ctx.fillRect(boss.x, boss.y, boss.w, boss.h); 
         ctx.fillStyle = 'black'; ctx.fillRect(boss.x-10, boss.y-5, boss.w+20, 3);
