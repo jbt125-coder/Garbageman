@@ -1,15 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Garbage Man: Ultimate Stability</title>
+    <title>Garbage Man: 2026 Edition</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { margin: 0; background: #05050a; overflow: hidden; font-family: 'Courier New', monospace; touch-action: none; color: white; }
         canvas { display: block; position: fixed; top: 0; left: 0; z-index: 1; width: 100vw; height: 100vh; }
         #title-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a1a; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         #start-btn { background: #f00; color: white; border: 4px solid #fff; padding: 20px 40px; font-size: 24px; font-weight: bold; border-radius: 50px; cursor: pointer; box-shadow: 0 0 20px red; }
+        
+        /* RESTORED RADIO */
         #ui { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 8px; border: 1px solid #0f0; z-index: 30; border-radius: 8px; width: 210px; }
-        #radio-screen { width: 200px; height: 60px; background: #000; margin-top: 5px; border: 1px solid #444; overflow: hidden; }
+        #radio-screen { width: 200px; height: 112px; background: #000; margin-top: 5px; border: 1px solid #444; overflow: hidden; position: relative; }
+        #yt-player { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #yt-player iframe { width: 100% !important; height: 100% !important; }
+        
         .controls { position: fixed; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; z-index: 20; align-items: flex-end; pointer-events: none; }
         .btn, #wheel-container { pointer-events: auto; }
         #wheel-container { width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; }
@@ -21,14 +26,26 @@
 <body onclick="unlockAudio()">
 
 <div id="title-screen">
-    <h1 style="color:#0f0; text-shadow: 0 0 20px #0f0;">GARBAGE MAN</h1>
-    <button id="start-btn" onclick="startGame()">IGNITION</button>
+    <canvas id="titleCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
+    <div style="position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 20px;">
+        <h1 id="title-text" style="font-size: 72px; font-weight: bold; margin: 0; text-shadow: 0 0 30px currentColor;">GARBAGE MAN</h1>
+        <button id="start-btn" onclick="startMiniGame()">IGNITION</button>
+    </div>
 </div>
 
 <div id="ui">
     <div style="font-size:11px; color:#0f0;">STG: <span id="stg">1</span> | HP: <span id="hp">100</span>%</div>
     <div style="font-size:11px; color:#0f0;">SQUASH: <span id="sq">0</span>/10 <span id="boss-ui" style="display:none">| BOSS: <span id="bhp">15</span></span></div>
     <div id="radio-screen"><div id="yt-player"></div></div>
+</div>
+
+<div id="minigame-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0a0a1a; z-index: 999; display: none; flex-direction: column; align-items: center; justify-content: center;">
+    <canvas id="minigameCanvas" style="border: 2px solid #0f0;"></canvas>
+    <div style="color: #0f0; font-size: 20px; margin-top: 20px; text-align: center;">
+        <div>LOAD THE TRUCK!</div>
+        <div style="font-size: 16px; margin-top: 10px;">Bags Loaded: <span id="bags-loaded">0</span>/10</div>
+        <div style="font-size: 14px; margin-top: 5px; color: #888;">Hold and release to throw bags into the truck bed</div>
+    </div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -42,7 +59,7 @@
     </div>
 </div>
 
-<script src="https://www.youtube.com"></script>
+<script src="https://www.youtube.com/iframe_api"></script>
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -54,9 +71,291 @@ let spawnTimer = 0, bgX = 0, moonX = 0, boss = null;
 
 const PLAYLIST_ID = "PLVWEzQMtQoqNxUszzfO0k3lDy_UxddjYy";
 
+// Title screen animation
+const titleCanvas = document.getElementById('titleCanvas');
+const titleCtx = titleCanvas.getContext('2d');
+const titleText = document.getElementById('title-text');
+let titleAnimFrame = 0;
+let titleTruckX = 0;
+
+function animateTitleScreen() {
+    if(!document.getElementById('title-screen') || document.getElementById('title-screen').style.display === 'none') return;
+    
+    titleCanvas.width = window.innerWidth;
+    titleCanvas.height = window.innerHeight;
+    
+    // Animated background stars
+    titleCtx.fillStyle = '#0a0a1a';
+    titleCtx.fillRect(0, 0, titleCanvas.width, titleCanvas.height);
+    
+    for(let i = 0; i < 50; i++) {
+        let x = (i * 50 + titleAnimFrame * 0.5) % titleCanvas.width;
+        let y = (i * 37) % titleCanvas.height;
+        titleCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        titleCtx.fillRect(x, y, 2, 2);
+    }
+    
+    // Ground
+    const groundY = titleCanvas.height - 150;
+    titleCtx.fillStyle = '#222';
+    titleCtx.fillRect(0, groundY, titleCanvas.width, 150);
+    
+    // Animated road lines
+    for(let i = 0; i < 10; i++) {
+        let lineX = (i * 100 + titleAnimFrame * 2) % titleCanvas.width;
+        titleCtx.fillStyle = '#666';
+        titleCtx.fillRect(lineX, groundY + 20, 60, 8);
+    }
+    
+    // Garbage truck
+    titleTruckX = titleCanvas.width / 2 - 50 + Math.sin(titleAnimFrame * 0.02) * 30;
+    const truckY = groundY - 50;
+    
+    // Truck body
+    titleCtx.fillStyle = '#0f0';
+    titleCtx.fillRect(titleTruckX, truckY, 100, 40);
+    titleCtx.fillStyle = '#0a0';
+    titleCtx.fillRect(titleTruckX + 10, truckY + 5, 80, 30);
+    
+    // Truck cab
+    titleCtx.fillStyle = '#0f0';
+    titleCtx.fillRect(titleTruckX + 70, truckY - 20, 30, 20);
+    titleCtx.fillStyle = '#444';
+    titleCtx.fillRect(titleTruckX + 75, truckY - 15, 20, 10);
+    
+    // Wheels
+    titleCtx.fillStyle = '#111';
+    titleCtx.beginPath();
+    titleCtx.arc(titleTruckX + 20, truckY + 40, 12, 0, Math.PI * 2);
+    titleCtx.fill();
+    titleCtx.beginPath();
+    titleCtx.arc(titleTruckX + 80, truckY + 40, 12, 0, Math.PI * 2);
+    titleCtx.fill();
+    
+    // Animate title color
+    const hue = (titleAnimFrame * 2) % 360;
+    titleText.style.color = `hsl(${hue}, 100%, 60%)`;
+    titleText.style.transform = `translateY(${Math.sin(titleAnimFrame * 0.05) * 10}px)`;
+    
+    titleAnimFrame++;
+    requestAnimationFrame(animateTitleScreen);
+}
+
+animateTitleScreen();
+
+// Mini game variables
+let miniGameActive = false;
+let miniBags = [];
+let miniTruck = { x: 0, y: 0, w: 100, h: 40 };
+let miniMan = { x: 50, y: 0, w: 30, h: 50 };
+let bagsLoaded = 0;
+let throwPower = 0;
+let charging = false;
+const miniCanvas = document.getElementById('minigameCanvas');
+const miniCtx = miniCanvas.getContext('2d');
+
+function startMiniGame() {
+    document.getElementById('title-screen').style.display = 'none';
+    document.getElementById('minigame-screen').style.display = 'flex';
+    miniGameActive = true;
+    
+    miniCanvas.width = Math.min(600, window.innerWidth - 40);
+    miniCanvas.height = Math.min(500, window.innerHeight - 200);
+    
+    miniTruck.x = miniCanvas.width - 150;
+    miniTruck.y = miniCanvas.height - 80;
+    miniTruck.w = 100;
+    miniTruck.h = 40;
+    
+    miniMan.x = 50;
+    miniMan.y = miniCanvas.height - 100;
+    miniMan.w = 30;
+    miniMan.h = 50;
+    
+    bagsLoaded = 0;
+    miniBags = [];
+    throwPower = 0;
+    charging = false;
+    
+    if(window.ytPlayer && window.ytPlayer.playVideo) { 
+        window.ytPlayer.unMute(); 
+        window.ytPlayer.playVideo(); 
+    }
+    
+    updateMiniGame();
+}
+
+miniCanvas.addEventListener('mousedown', (e) => {
+    if(!miniGameActive) return;
+    charging = true;
+    throwPower = 0;
+});
+
+miniCanvas.addEventListener('mouseup', (e) => {
+    if(!miniGameActive || !charging) return;
+    charging = false;
+    throwBag();
+});
+
+miniCanvas.addEventListener('touchstart', (e) => {
+    if(!miniGameActive) return;
+    e.preventDefault();
+    charging = true;
+    throwPower = 0;
+});
+
+miniCanvas.addEventListener('touchend', (e) => {
+    if(!miniGameActive || !charging) return;
+    e.preventDefault();
+    charging = false;
+    throwBag();
+});
+
+function throwBag() {
+    const power = Math.min(throwPower, 100);
+    const angle = -0.6; // Arc angle
+    const speed = 8 + (power * 0.08);
+    
+    miniBags.push({
+        x: miniMan.x + miniMan.w,
+        y: miniMan.y + 20,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        w: 20,
+        h: 20,
+        gravity: 0.35
+    });
+}
+
+function updateMiniGame() {
+    if(!miniGameActive) return;
+    
+    // Charge power when holding
+    if(charging) {
+        throwPower += 3;
+        if(throwPower > 100) throwPower = 100;
+    }
+    
+    miniCtx.fillStyle = '#1a1a2e';
+    miniCtx.fillRect(0, 0, miniCanvas.width, miniCanvas.height);
+    
+    // Ground
+    miniCtx.fillStyle = '#2a2a3e';
+    miniCtx.fillRect(0, miniCanvas.height - 50, miniCanvas.width, 50);
+    
+    // Move truck slightly up and down
+    const truckBob = Math.sin(Date.now() * 0.003) * 5;
+    miniTruck.y = miniCanvas.height - 80 + truckBob;
+    
+    // Draw man on left
+    miniCtx.fillStyle = '#fa0';
+    miniCtx.fillRect(miniMan.x, miniMan.y, miniMan.w, miniMan.h);
+    // Man's head
+    miniCtx.fillStyle = '#ffb380';
+    miniCtx.beginPath();
+    miniCtx.arc(miniMan.x + miniMan.w/2, miniMan.y - 10, 12, 0, Math.PI * 2);
+    miniCtx.fill();
+    // Arm throwing
+    miniCtx.fillStyle = '#ffb380';
+    const armAngle = charging ? -0.8 : -0.3;
+    miniCtx.save();
+    miniCtx.translate(miniMan.x + miniMan.w, miniMan.y + 10);
+    miniCtx.rotate(armAngle);
+    miniCtx.fillRect(0, -3, 25, 6);
+    miniCtx.restore();
+    
+    // Draw truck on right
+    miniCtx.fillStyle = '#0f0';
+    miniCtx.fillRect(miniTruck.x, miniTruck.y, miniTruck.w, miniTruck.h);
+    miniCtx.fillStyle = '#0a0';
+    miniCtx.fillRect(miniTruck.x + 10, miniTruck.y + 5, miniTruck.w - 20, miniTruck.h - 10);
+    
+    // Truck cab
+    miniCtx.fillStyle = '#0f0';
+    miniCtx.fillRect(miniTruck.x + 70, miniTruck.y - 20, 30, 20);
+    miniCtx.fillStyle = '#444';
+    miniCtx.fillRect(miniTruck.x + 75, miniTruck.y - 15, 20, 10);
+    
+    // Truck bed opening (target area)
+    miniCtx.fillStyle = '#000';
+    miniCtx.fillRect(miniTruck.x + 10, miniTruck.y - 35, 50, 35);
+    miniCtx.strokeStyle = '#0f0';
+    miniCtx.lineWidth = 2;
+    miniCtx.strokeRect(miniTruck.x + 10, miniTruck.y - 35, 50, 35);
+    
+    // Wheels
+    miniCtx.fillStyle = '#111';
+    miniCtx.beginPath();
+    miniCtx.arc(miniTruck.x + 20, miniTruck.y + 40, 12, 0, Math.PI * 2);
+    miniCtx.fill();
+    miniCtx.beginPath();
+    miniCtx.arc(miniTruck.x + 80, miniTruck.y + 40, 12, 0, Math.PI * 2);
+    miniCtx.fill();
+    
+    // Power meter
+    if(charging) {
+        miniCtx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        miniCtx.fillRect(miniMan.x - 10, miniMan.y - 50, 50, 10);
+        miniCtx.fillStyle = '#f00';
+        miniCtx.fillRect(miniMan.x - 10, miniMan.y - 50, (throwPower / 100) * 50, 10);
+    }
+    
+    // Update and draw bags
+    for(let i = miniBags.length - 1; i >= 0; i--) {
+        const bag = miniBags[i];
+        bag.vy += bag.gravity;
+        bag.y += bag.vy;
+        bag.x += bag.vx;
+        
+        // Check if bag lands in truck bed
+        if(bag.vy > 0 && 
+           bag.x > miniTruck.x + 10 && bag.x < miniTruck.x + 60 && 
+           bag.y > miniTruck.y - 35 && bag.y < miniTruck.y) {
+            bagsLoaded++;
+            document.getElementById('bags-loaded').innerText = bagsLoaded;
+            miniBags.splice(i, 1);
+            
+            // Flash effect
+            miniCtx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+            miniCtx.fillRect(miniTruck.x + 10, miniTruck.y - 35, 50, 35);
+            
+            if(bagsLoaded >= 10) {
+                setTimeout(() => {
+                    miniGameActive = false;
+                    document.getElementById('minigame-screen').style.display = 'none';
+                    startGame();
+                }, 500);
+            }
+            continue;
+        }
+        
+        // Remove if off screen
+        if(bag.y > miniCanvas.height + 50 || bag.x < -50 || bag.x > miniCanvas.width + 50) {
+            miniBags.splice(i, 1);
+            continue;
+        }
+        
+        // Draw bag with rotation
+        miniCtx.save();
+        miniCtx.translate(bag.x, bag.y);
+        miniCtx.rotate(bag.vx * 0.1);
+        miniCtx.fillStyle = '#fa0';
+        miniCtx.fillRect(-bag.w/2, -bag.h/2, bag.w, bag.h);
+        miniCtx.fillStyle = '#c80';
+        miniCtx.fillRect(-bag.w/2 + 3, -bag.h/2 + 3, bag.w - 6, bag.h - 6);
+        // Dollar sign
+        miniCtx.fillStyle = '#0a0';
+        miniCtx.font = 'bold 12px Arial';
+        miniCtx.fillText('$', -4, 4);
+        miniCtx.restore();
+    }
+    
+    requestAnimationFrame(updateMiniGame);
+}
+
 function onYouTubeIframeAPIReady() {
     window.ytPlayer = new YT.Player('yt-player', {
-        height: '60', width: '200',
+        height: '112', width: '200',
         playerVars: { 'listType': 'playlist', 'list': PLAYLIST_ID, 'autoplay': 1, 'mute': 1, 'playsinline': 1 }
     });
 }
@@ -65,30 +364,24 @@ function startGame() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     player.x = canvas.width / 2 - 30;
-    const ground = canvas.height - 220;
-    player.y = ground - 30; 
+    player.y = canvas.height - 250; 
     moonX = canvas.width - 80;
-    document.getElementById('title-screen').style.display = 'none';
     gameStarted = true;
-    if(window.ytPlayer && window.ytPlayer.playVideo) { window.ytPlayer.unMute(); window.ytPlayer.playVideo(); }
     update();
 }
 
 function unlockAudio() { if(window.ytPlayer) { window.ytPlayer.unMute(); window.ytPlayer.playVideo(); } }
 
-// STEERING FIX
 const wheelCont = document.getElementById('wheel-container');
 const wheelEl = document.getElementById('wheel');
 wheelCont.addEventListener('touchmove', (e) => {
     const rect = wheelCont.getBoundingClientRect();
-    const angle = Math.atan2(e.touches[0].clientY - (rect.top + rect.height/2), e.touches[0].clientX - (rect.left + rect.width/2));
+    const touch = e.touches[0];
+    const angle = Math.atan2(touch.clientY - (rect.top + rect.height/2), touch.clientX - (rect.left + rect.width/2));
     wheelEl.style.transform = `rotate(${angle}rad)`;
     
-    // Smooth boundary-locked steering
-    let move = Math.cos(angle) * 15;
-    if (player.x + move > 0 && player.x + move < canvas.width - player.w) {
-        player.x += move;
-    }
+    let steerAmount = Math.cos(angle) * 15;
+    player.x = Math.max(0, Math.min(canvas.width - player.w, player.x + steerAmount));
 }, {passive: false});
 
 const setup = (id) => {
@@ -96,13 +389,10 @@ const setup = (id) => {
         e.preventDefault();
         if(id === 'gas') { gear = (gear + 1) % 4; player.targetSpeed = gear * 7; }
         if(id === 'jump' && stage !== 2) { 
-            if(!player.jumped){ 
-                player.dy = -10; // Light, floaty jump
-                player.jumped = true; 
-            } 
+            if(!player.jumped){ player.dy = -7; player.jumped = true; } 
         }
         if(id === 'drop') {
-            bags.push({ x: player.x+20, y: player.y+(stage===2?60:10), w: 15, h: 15, vy: (stage===2?12:-6), sx: (stage!==2?-player.speed:0) });
+            bags.push({ x: player.x+20, y: player.y+(stage===2?60:10), w: 15, h: 15, vy: (stage===2?12:-7), sx: (stage!==2?-player.speed:0) });
         }
     });
 };
@@ -113,36 +403,26 @@ for(let i=0; i<12; i++) { buildings.push({x:i*300, w:120, h:120+Math.random()*15
 
 function update() {
     if(!gameStarted) return;
-    
     const groundY = canvas.height - 220; 
-    
     player.speed += (player.targetSpeed - player.speed) * 0.05;
 
     if(stage === 1 || stage === 3) {
         player.y += player.dy;
-        
-        // Gravity logic
-        if(player.y + player.h < groundY) {
-            player.dy += 0.4; // Very light gravity
-        } else {
-            player.y = groundY - player.h;
-            player.dy = 0;
-            player.jumped = false;
-        }
+        if(player.y + player.h < groundY) { player.dy += 0.6; } 
+        else { player.y = groundY - player.h; player.dy = 0; player.jumped = false; }
 
-        // ABSOLUTE SAFETY ANCHOR
-        if (player.y < 0) player.y = 0; 
-        if (player.y > canvas.height) player.y = groundY - player.h;
+        if (player.y < 150) { player.y = 150; player.dy = 1; }
         
         bgX -= player.speed * 0.5;
         moonX -= player.speed * 0.02;
 
         if(stage === 3) {
             document.getElementById('boss-ui').style.display = 'inline';
-            if(!boss) boss = { x: canvas.width, y: 120, w: 140, h: 45, hp: 15, dir: -1 };
+            // BOSS SPAWN CENTER
+            if(!boss) boss = { x: canvas.width/2 - 70, y: 120, w: 140, h: 45, hp: 15, dir: -1 };
             boss.x += (boss.dir * (3 + (15-boss.hp)*0.3));
             if(boss.x < 10 || boss.x > canvas.width - 150) boss.dir *= -1;
-            if(++spawnTimer > 80) { spikes.push({x: boss.x + 60, y: boss.y + 40}); spawnTimer = 0; }
+            if(++spawnTimer > 80) { spikes.push({x: boss.x + 60, y: boss.y + 40, w:20, h:20}); spawnTimer = 0; }
             document.getElementById('bhp').innerText = boss.hp;
             bags.forEach((b, bi) => {
                 if(b.x < boss.x+boss.w && b.x+b.w > boss.x && b.y < boss.y+boss.h && b.y+b.h > boss.y) { boss.hp--; bags.splice(bi, 1); if(boss.hp <= 0) { alert("POLICE ESCAPED!"); location.reload(); } }
@@ -153,7 +433,7 @@ function update() {
         enemies.forEach((en, i) => {
             en.x -= (player.speed + 2.5);
             if(player.x < en.x+en.w && player.x+player.w > en.x && player.y < en.y+en.h && player.y+player.h > en.y) {
-                if(player.dy > 0 && player.y + player.h < en.y + 15) { enemies.splice(i,1); player.dy = -8; squashes++; } 
+                if(player.dy > 0 && player.y + player.h < en.y + 15) { enemies.splice(i,1); player.dy = -5; squashes++; } 
                 else { health -= 10; enemies.splice(i,1); }
             }
         });
@@ -168,7 +448,7 @@ function update() {
     }
 
     bags.forEach((b, i) => { b.y += b.vy; b.x += b.sx; if(b.y > canvas.height+100 || b.y < -200) bags.splice(i,1); });
-    spikes.forEach((s, i) => { s.y += 7; s.x -= player.speed * 0.5; if(player.x < s.x+20 && player.x+20 > s.x && player.y < s.y+20 && player.y+20 > s.y) { health -= 15; spikes.splice(i,1); } });
+    spikes.forEach((s, i) => { s.y += 7; s.x -= player.speed * 0.5; if(player.x < s.x+s.w && player.x+player.w > s.x && player.y < s.y+s.h && player.y+player.h > s.y) { health -= 15; spikes.splice(i,1); } });
     
     document.getElementById('hp').innerText = health;
     document.getElementById('stg').innerText = stage;
@@ -181,11 +461,10 @@ function update() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const groundY = canvas.height - 220;
-    
     ctx.fillStyle = "white";
     stars.forEach(s => ctx.fillRect((s.x - bgX*0.1)%canvas.width, s.y, s.s, s.s));
     ctx.beginPath(); ctx.arc(moonX % (canvas.width+200), 80, 30, 0, Math.PI*2); ctx.fill();
-
+    
     if(stage !== 2) {
         buildings.forEach(b => {
             let bx = (b.x + bgX) % (buildings.length * 300); if(bx < -150) bx += buildings.length * 300;
@@ -200,21 +479,64 @@ function draw() {
         ctx.strokeStyle = '#666'; ctx.lineWidth = 1; for(let i=0; i<30; i++) ctx.strokeRect((i*80 + bgX * 1.2) % canvas.width, groundY - 25, 80, 25);
         ctx.fillStyle = '#111'; ctx.fillRect(0, groundY, canvas.width, 220);
     } else {
-        ctx.fillStyle = '#151515'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        for(let i=0; i<10; i++) { ctx.fillStyle='#444'; ctx.fillRect(canvas.width/2-5, (Date.now()/5%100)+i*100, 10, 40); }
+        // Stage 2: Vertical scrolling space background
+        ctx.fillStyle = '#151515'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw scrolling vertical lines for space effect
+        for(let i = 0; i < 10; i++) {
+            let lineX = (i * canvas.width / 10 + bgX * 0.3) % canvas.width;
+            ctx.strokeStyle = 'rgba(100, 100, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(lineX, 0);
+            ctx.lineTo(lineX, canvas.height);
+            ctx.stroke();
+        }
+        
+        // Add some stars for space atmosphere
+        stars.forEach(s => {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.fillRect((s.x - bgX * 0.2) % canvas.width, s.y, s.s, s.s);
+        });
     }
 
-    if(boss) { 
-        ctx.fillStyle = '#003366'; ctx.fillRect(boss.x, boss.y, boss.w, boss.h); 
-        ctx.fillStyle = 'black'; ctx.fillRect(boss.x-10, boss.y-5, boss.w+20, 3);
-        let isRed = Math.floor(Date.now() / 150) % 2 === 0;
-        ctx.fillStyle = isRed ? 'red' : 'blue'; ctx.fillRect(boss.x + 10, boss.y + boss.h - 5, 30, 5); 
-        ctx.fillStyle = !isRed ? 'red' : 'blue'; ctx.fillRect(boss.x + boss.w - 40, boss.y + boss.h - 5, 30, 5);
+    // Draw player
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.fillStyle = '#0a0';
+    ctx.fillRect(player.x + 5, player.y + 5, player.w - 10, player.h - 10);
+
+    // Draw enemies
+    enemies.forEach(en => {
+        ctx.fillStyle = en.c;
+        ctx.fillRect(en.x, en.y, en.w, en.h);
+    });
+
+    // Draw bags/projectiles
+    bags.forEach(b => {
+        ctx.fillStyle = '#fa0';
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+    });
+
+    // Draw spikes (stage 3)
+    spikes.forEach(s => {
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(s.x, s.y, s.w, s.h);
+    });
+
+    // Draw boss (stage 3)
+    if(boss && stage === 3) {
+        ctx.fillStyle = '#00f';
+        ctx.fillRect(boss.x, boss.y, boss.w, boss.h);
+        ctx.fillStyle = '#00a';
+        ctx.fillRect(boss.x + 10, boss.y + 5, boss.w - 20, boss.h - 10);
+        
+        // Boss lights
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(boss.x + 20, boss.y + 10, 8, 8);
+        ctx.fillRect(boss.x + boss.w - 28, boss.y + 10, 8, 8);
     }
-    ctx.fillStyle = 'orange'; bags.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
-    ctx.fillStyle = 'red'; spikes.forEach(s => ctx.fillRect(s.x, s.y, 20, 20));
-    ctx.fillStyle = '#0ff'; ctx.fillRect(player.x, player.y, player.w, player.h);
-    enemies.forEach(en => { ctx.fillStyle = en.c; ctx.fillRect(en.x, en.y, en.w, en.h); });
 }
 </script>
 </body>
