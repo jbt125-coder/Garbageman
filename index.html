@@ -42,7 +42,7 @@
 <div id="minigame-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0a0a1a; z-index: 999; display: none; flex-direction: column; align-items: center; justify-content: center;">
     <canvas id="minigameCanvas" style="border: 2px solid #0f0;"></canvas>
     <div style="color: #0f0; font-size: 20px; margin-top: 20px; text-align: center;">
-        <div>LOAD THE TRUCK!</div>
+        <div style="color: #f00; text-shadow: 0 0 10px #f00;">⚠️ LOAD THE MONEY BEFORE THE COPS GET HERE! ⚠️</div>
         <div style="font-size: 16px; margin-top: 10px;">Bags Loaded: <span id="bags-loaded">0</span>/10</div>
         <div style="font-size: 14px; margin-top: 5px; color: #888;">Hold and release to throw bags into the truck bed</div>
     </div>
@@ -64,10 +64,10 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-let stage = 1, health = 100, squashes = 0, gear = 0, gameStarted = false;
+let stage = 1, health = 100, squashes = 0, gear = 0, gameStarted = false, difficulty = 1;
 let player = { x: 0, y: 0, w: 60, h: 30, dy: 0, speed: 0, targetSpeed: 0, jumped: false };
 let enemies = [], bags = [], buildings = [], stars = [], spikes = [], lights = [];
-let spawnTimer = 0, bgX = 0, moonX = 0, boss = null;
+let spawnTimer = 0, bgX = 0, moonX = 0, boss = null, roadLines = [];
 
 const PLAYLIST_ID = "PLVWEzQMtQoqNxUszzfO0k3lDy_UxddjYy";
 
@@ -389,7 +389,7 @@ const setup = (id) => {
         e.preventDefault();
         if(id === 'gas') { gear = (gear + 1) % 4; player.targetSpeed = gear * 7; }
         if(id === 'jump' && stage !== 2) { 
-            if(!player.jumped){ player.dy = -7; player.jumped = true; } 
+            if(!player.jumped){ player.dy = -9; player.jumped = true; } 
         }
         if(id === 'drop') {
             bags.push({ x: player.x+20, y: player.y+(stage===2?60:10), w: 15, h: 15, vy: (stage===2?12:-7), sx: (stage!==2?-player.speed:0) });
@@ -400,6 +400,7 @@ const setup = (id) => {
 
 for(let i=0; i<40; i++) stars.push({x:Math.random()*2000, y:Math.random()*300, s:Math.random()*2});
 for(let i=0; i<12; i++) { buildings.push({x:i*300, w:120, h:120+Math.random()*150}); lights.push({x:i*450}); }
+for(let i=0; i<20; i++) { roadLines.push({y: i * 100}); }
 
 function update() {
     if(!gameStarted) return;
@@ -419,32 +420,55 @@ function update() {
         if(stage === 3) {
             document.getElementById('boss-ui').style.display = 'inline';
             // BOSS SPAWN CENTER
-            if(!boss) boss = { x: canvas.width/2 - 70, y: 120, w: 140, h: 45, hp: 15, dir: -1 };
-            boss.x += (boss.dir * (3 + (15-boss.hp)*0.3));
+            if(!boss) boss = { x: canvas.width/2 - 70, y: 120, w: 140, h: 45, hp: 15 + (difficulty * 5), dir: -1 };
+            boss.x += (boss.dir * (3 + (15-boss.hp)*0.3 + difficulty * 0.5));
             if(boss.x < 10 || boss.x > canvas.width - 150) boss.dir *= -1;
-            if(++spawnTimer > 80) { spikes.push({x: boss.x + 60, y: boss.y + 40, w:20, h:20}); spawnTimer = 0; }
+            if(++spawnTimer > (80 - difficulty * 5)) { spikes.push({x: boss.x + 60, y: boss.y + 40, w:20, h:20}); spawnTimer = 0; }
             document.getElementById('bhp').innerText = boss.hp;
             bags.forEach((b, bi) => {
-                if(b.x < boss.x+boss.w && b.x+b.w > boss.x && b.y < boss.y+boss.h && b.y+b.h > boss.y) { boss.hp--; bags.splice(bi, 1); if(boss.hp <= 0) { alert("POLICE ESCAPED!"); location.reload(); } }
+                if(b.x < boss.x+boss.w && b.x+b.w > boss.x && b.y < boss.y+boss.h && b.y+b.h > boss.y) { 
+                    boss.hp--; 
+                    bags.splice(bi, 1); 
+                    if(boss.hp <= 0) { 
+                        difficulty++;
+                        setTimeout(() => {
+                            alert("POLICE ESCAPED! DIFFICULTY " + difficulty);
+                            // Restart with harder difficulty
+                            stage = 1;
+                            health = 100;
+                            squashes = 0;
+                            enemies = [];
+                            bags = [];
+                            spikes = [];
+                            boss = null;
+                            player.w = 60;
+                            player.h = 30;
+                            player.y = canvas.height - 250;
+                        }, 100);
+                    } 
+                }
             });
         } else {
-            if(++spawnTimer > 110) { enemies.push({x: canvas.width+50, y: groundY-30, w: 55, h: 30, c: '#f0f'}); spawnTimer = 0; }
+            if(++spawnTimer > (110 - difficulty * 10)) { enemies.push({x: canvas.width+50, y: groundY-30, w: 55, h: 30, c: '#f0f'}); spawnTimer = 0; }
         }
         enemies.forEach((en, i) => {
-            en.x -= (player.speed + 2.5);
+            en.x -= (player.speed + 2.5 + difficulty * 0.5);
             if(player.x < en.x+en.w && player.x+player.w > en.x && player.y < en.y+en.h && player.y+player.h > en.y) {
-                if(player.dy > 0 && player.y + player.h < en.y + 15) { enemies.splice(i,1); player.dy = -5; squashes++; } 
+                if(player.dy > 0 && player.y + player.h < en.y + 15) { enemies.splice(i,1); player.dy = -7; squashes++; } 
                 else { health -= 10; enemies.splice(i,1); }
             }
         });
-        if(stage === 1 && squashes >= 10) { stage = 2; player.w = 30; player.h = 60; enemies = []; }
+        if(stage === 1 && squashes >= 10) { stage = 2; player.w = 30; player.h = 60; player.y = 150; enemies = []; }
     } else {
-        if(++spawnTimer > 50) { enemies.push({x: player.x+(Math.random()*80-40), y: canvas.height+50, w: 30, h: 60, c: 'white'}); spawnTimer = 0; }
+        // Stage 2 - position player higher on screen
+        player.y = 150;
+        
+        if(++spawnTimer > (50 - difficulty * 5)) { enemies.push({x: player.x+(Math.random()*80-40), y: canvas.height+50, w: 30, h: 60, c: 'blue'}); spawnTimer = 0; }
         enemies.forEach((en, i) => {
-            en.y -= (2 + player.speed * 0.6);
+            en.y -= (2 + player.speed * 0.6 + difficulty * 0.5);
             bags.forEach((b, bi) => { if(b.x < en.x+en.w && b.x+b.w > en.x && b.y < en.y+en.h && b.y+b.h > en.y) { enemies.splice(i,1); bags.splice(bi,1); squashes++; } });
         });
-        if(squashes >= 20) { stage = 3; player.w = 60; player.h = 30; enemies = []; }
+        if(squashes >= 20) { stage = 3; player.w = 60; player.h = 30; player.y = canvas.height - 250; enemies = []; }
     }
 
     bags.forEach((b, i) => { b.y += b.vy; b.x += b.sx; if(b.y > canvas.height+100 || b.y < -200) bags.splice(i,1); });
@@ -494,6 +518,19 @@ function draw() {
             ctx.stroke();
         }
         
+        // Yellow road lines moving up
+        roadLines.forEach(line => {
+            line.y -= (3 + player.speed * 0.4);
+            if(line.y < -100) line.y = canvas.height + 50;
+            
+            // Draw yellow dashed lines (3 lanes)
+            ctx.fillStyle = '#ff0';
+            const laneWidth = canvas.width / 4;
+            for(let lane = 1; lane <= 3; lane++) {
+                ctx.fillRect(laneWidth * lane - 5, line.y, 10, 60);
+            }
+        });
+        
         // Add some stars for space atmosphere
         stars.forEach(s => {
             ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
@@ -509,8 +546,27 @@ function draw() {
 
     // Draw enemies
     enemies.forEach(en => {
-        ctx.fillStyle = en.c;
-        ctx.fillRect(en.x, en.y, en.w, en.h);
+        if(stage === 2) {
+            // Cop car moving up (vertical orientation)
+            ctx.fillStyle = en.c;
+            ctx.fillRect(en.x, en.y, en.w, en.h);
+            
+            // Car details
+            ctx.fillStyle = '#000';
+            ctx.fillRect(en.x + 3, en.y + 5, en.w - 6, 15);
+            ctx.fillRect(en.x + 3, en.y + en.h - 20, en.w - 6, 15);
+            
+            // Flashing lights (alternating red and blue)
+            const flashOn = Math.floor(Date.now() / 200) % 2 === 0;
+            ctx.fillStyle = flashOn ? '#f00' : '#00f';
+            ctx.fillRect(en.x + 3, en.y + 25, 10, 8);
+            ctx.fillStyle = flashOn ? '#00f' : '#f00';
+            ctx.fillRect(en.x + en.w - 13, en.y + 25, 10, 8);
+        } else {
+            // Regular enemies for stage 1 and 3
+            ctx.fillStyle = en.c;
+            ctx.fillRect(en.x, en.y, en.w, en.h);
+        }
     });
 
     // Draw bags/projectiles
@@ -527,15 +583,57 @@ function draw() {
 
     // Draw boss (stage 3)
     if(boss && stage === 3) {
+        // Helicopter body
         ctx.fillStyle = '#00f';
-        ctx.fillRect(boss.x, boss.y, boss.w, boss.h);
-        ctx.fillStyle = '#00a';
-        ctx.fillRect(boss.x + 10, boss.y + 5, boss.w - 20, boss.h - 10);
+        ctx.fillRect(boss.x + 30, boss.y + 15, 80, 30);
         
-        // Boss lights
-        ctx.fillStyle = '#f00';
-        ctx.fillRect(boss.x + 20, boss.y + 10, 8, 8);
-        ctx.fillRect(boss.x + boss.w - 28, boss.y + 10, 8, 8);
+        // Helicopter cockpit (front bubble)
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(boss.x + 100, boss.y + 25, 15, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Tail
+        ctx.fillStyle = '#00a';
+        ctx.fillRect(boss.x + 10, boss.y + 25, 30, 8);
+        
+        // Tail rotor
+        ctx.fillStyle = '#666';
+        ctx.fillRect(boss.x + 5, boss.y + 20, 8, 18);
+        
+        // Landing skids
+        ctx.fillStyle = '#333';
+        ctx.fillRect(boss.x + 40, boss.y + 45, 60, 3);
+        ctx.fillRect(boss.x + 45, boss.y + 43, 3, 5);
+        ctx.fillRect(boss.x + 92, boss.y + 43, 3, 5);
+        
+        // Main rotor blades (spinning)
+        const rotorAngle = (Date.now() * 0.02) % (Math.PI * 2);
+        ctx.save();
+        ctx.translate(boss.x + 70, boss.y + 10);
+        ctx.rotate(rotorAngle);
+        ctx.fillStyle = '#888';
+        ctx.fillRect(-40, -3, 80, 6);
+        ctx.fillRect(-3, -40, 6, 80);
+        ctx.restore();
+        
+        // Rotor hub
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(boss.x + 70, boss.y + 10, 8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Warning lights
+        const lightOn = Math.floor(Date.now() / 300) % 2 === 0;
+        if(lightOn) {
+            ctx.fillStyle = '#f00';
+            ctx.beginPath();
+            ctx.arc(boss.x + 55, boss.y + 25, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(boss.x + 85, boss.y + 25, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 }
 </script>
