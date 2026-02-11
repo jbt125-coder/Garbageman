@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Garbage Man: Radio Fixed</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { margin: 0; background: #05050a; overflow: hidden; font-family: 'Courier New', monospace; touch-action: none; color: white; }
+        canvas { display: block; position: fixed; top: 0; left: 0; z-index: 1; }
+        
+        /* Title Screen */
+        #title-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a1a; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #start-btn { background: #f00; color: white; border: 4px solid #fff; padding: 20px 40px; font-size: 24px; font-weight: bold; border-radius: 50px; cursor: pointer; }
+
+        /* THE RADIO DASHBOARD */
+        #ui { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 10px; border: 2px solid #0f0; z-index: 30; border-radius: 10px; width: 220px; }
+        #radio-screen { width: 200px; height: 120px; background: #000; margin-top: 5px; border: 1px solid #444; }
+        
+        .controls { position: fixed; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; z-index: 20; align-items: flex-end; pointer-events: none; }
+        .btn, #wheel-container { pointer-events: auto; }
+        #wheel-container { width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; }
+        #wheel { width: 110px; height: 110px; border: 8px solid #555; border-radius: 50%; position: relative; background: radial-gradient(circle, #111 25%, transparent 26%); }
+        #wheel::after { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 8px; background: #555; margin-top: -4px; }
+        .btn-group { display: flex; gap: 8px; }
+        .btn { width: 65px; height: 65px; background: rgba(255,255,255,0.1); border: 2px solid white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="title-screen">
+    <h1 style="color:#0f0; text-shadow: 0 0 20px #0f0;">GARBAGE MAN</h1>
+    <button id="start-btn" onclick="startGame()">IGNITION</button>
+    <p style="font-size:12px; color:gray; margin-top:15px;">Tap Ignition, then Tap PLAY on the Radio</p>
+</div>
+
+<div id="ui">
+    <div style="font-size:12px; color:#0f0; font-weight:bold;">RADIO DASHBOARD</div>
+    <!-- This is the actual YouTube window. It must be visible to play audio. -->
+    <div id="radio-screen">
+        <div id="yt-player"></div>
+    </div>
+    <div style="font-size:10px; margin-top:5px;">
+        HP: <span id="hp">100</span>% | STAGE: <span id="stg">1</span>
+    </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<div class="controls">
+    <div id="wheel-container"><div id="wheel"></div></div>
+    <div class="btn-group">
+        <div class="btn" id="gas" style="background:rgba(255,0,0,0.5)">GAS</div>
+        <div class="btn" id="jump" style="background:rgba(0,255,0,0.5)">JUMP</div>
+        <div class="btn" id="drop" style="background:rgba(255,165,0,0.5)">DROP</div>
+    </div>
+</div>
+
+<script src="https://www.youtube.com"></script>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let stage = 1, health = 100, squashes = 0, gear = 0, gameStarted = false;
+let player = { x: canvas.width/2, y: 150, w: 60, h: 25, dy: 0, speed: 0, targetSpeed: 0 };
+let enemies = [], bags = [], buildings = [], streetLights = [], spikes = [];
+let spawnTimer = 0, bgCityX = 0, boss = null;
+
+// YOUR PLAYLIST
+const PLAYLIST_ID = "PLVWEzQMtQoqNxUszzfO0k3lDy_UxddjYy";
+
+function onYouTubeIframeAPIReady() {
+    window.ytPlayer = new YT.Player('yt-player', {
+        height: '120',
+        width: '200',
+        playerVars: {
+            'listType': 'playlist',
+            'list': PLAYLIST_ID,
+            'autoplay': 0, // Set to 0 so the user HAS to tap play to authorize audio
+            'controls': 1
+        }
+    });
+}
+
+function startGame() {
+    document.getElementById('title-screen').style.display = 'none';
+    gameStarted = true;
+    update();
+}
+
+// Steering Logic
+const wheelCont = document.getElementById('wheel-container');
+const wheelEl = document.getElementById('wheel');
+wheelCont.addEventListener('touchmove', (e) => {
+    const rect = wheelCont.getBoundingClientRect();
+    const angle = Math.atan2(e.touches[0].clientY - (rect.top + 70), e.touches[0].clientX - (rect.left + 70));
+    wheelEl.style.transform = `rotate(${angle}rad)`;
+    player.x += Math.cos(angle) * 12;
+}, {passive: false});
+
+// Action Logic
+const setupAction = (id) => {
+    document.getElementById(id).addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if(id === 'gas') { gear = (gear + 1) % 4; player.targetSpeed = gear * 8; }
+        if(id === 'jump' && stage !== 2) { if(!player.jumped){ player.dy = -22; player.jumped = true; } }
+        if(id === 'drop') {
+            bags.push({ x: player.x+20, y: player.y+(stage===2?60:10), w: 18, h: 18, vy: (stage===2?12:-4) });
+        }
+    });
+};
+['gas','jump','drop'].forEach(setupAction);
+
+// Setup City
+for(let i=0; i<15; i++) {
+    buildings.push({ x: i*250, w: 100+Math.random()*60, h: 100+Math.random()*150 });
+    streetLights.push({ x: i*400 });
+}
+
+function update() {
+    if(!gameStarted) return;
+    player.speed += (player.targetSpeed - player.speed) * 0.04;
+    player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+    const groundY = 320; 
+
+    if(stage === 1 || stage === 3) {
+        player.y += player.dy;
+        if(player.y + player.h < groundY) player.dy += 1.0;
+        else { player.y = groundY - player.h; player.dy = 0; player.jumped = false; }
+        bgCityX -= player.speed * 0.5;
+
+        if(stage === 3) {
+            if(!boss) boss = { x: canvas.width, y: 50, w: 120, h: 50, hp: 10, dir: -1 };
+            boss.x += (boss.dir * 3);
+            if(boss.x < 50 || boss.x > canvas.width - 150) boss.dir *= -1;
+            if(++spawnTimer > 100) { spikes.push({ x: boss.x + 50, y: boss.y + 50, w: 20, h: 20 }); spawnTimer = 0; }
+            bags.forEach((b, bi) => {
+                if(b.x < boss.x+boss.w && b.x+b.w > boss.x && b.y < boss.y+boss.h && b.y+b.h > en.y) { // Simplified hit detection
+                    boss.hp--; bags.splice(bi, 1);
+                }
+            });
+        } else {
+            if(++spawnTimer > 75) { enemies.push({ x: canvas.width + 50, y: groundY - 30, w: 55, h: 30, c: '#f0f' }); spawnTimer = 0; }
+        }
+
+        enemies.forEach((en, i) => {
+            en.x -= (player.speed + 4);
+            if(player.x < en.x+en.w && player.x+player.w > en.x && player.y < en.y+en.h && player.y+player.h > en.y) {
+                if(player.dy > 0 && player.y + player.h < en.y + 15) { enemies.splice(i, 1); player.dy = -20; squashes++; }
+                else { health -= 10; enemies.splice(i, 1); }
+            }
+        });
+        if(stage === 1 && squashes >= 10) { stage = 2; player.w = 30; player.h = 60; player.y = 200; enemies = []; }
+    } else {
+        const enemyChaseSpeed = Math.max(0.5, 6 - (player.speed * 0.5));
+        if(++spawnTimer > 45) { enemies.push({ x: player.x + (Math.random()*100-50), y: canvas.height + 50, w: 30, h: 60, c: 'white' }); spawnTimer = 0; }
+        enemies.forEach((en, i) => {
+            en.y -= enemyChaseSpeed;
+            if(player.x < en.x+en.w && player.x+player.w > en.x && player.y < en.y+en.h && player.y+player.h > en.y) { health -= 10; enemies.splice(i, 1); }
+            bags.forEach((b, bi) => { if(b.x < en.x+en.w && b.x+b.w > en.x && b.y < en.y+en.h && b.y+b.h > en.y) { enemies.splice(i, 1); bags.splice(bi, 1); squashes++; } });
+        });
+        if(squashes >= 20) { stage = 3; player.w = 60; player.h = 25; enemies = []; }
+    }
+
+    bags.forEach((b, i) => { b.y += b.vy; if(stage !== 2) b.x -= player.speed; });
+    document.getElementById('hp').innerText = health;
+    document.getElementById('stg').innerText = stage;
+    if(health <= 0) location.reload();
+    draw();
+    requestAnimationFrame(update);
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const groundY = 320;
+    if(stage !== 2) {
+        buildings.forEach(b => {
+            let bx = (b.x + bgCityX) % (buildings.length * 250);
+            ctx.fillStyle = '#0a0a1a'; ctx.fillRect(bx, groundY - b.h, b.w, b.h);
+        });
+        streetLights.forEach(sl => {
+            let sx = (sl.x + bgCityX) % (buildings.length * 250);
+            ctx.fillStyle = '#888'; ctx.fillRect(sx, groundY - 120, 4, 120);
+            ctx.fillStyle = 'rgba(255, 255, 100, 0.15)';
+            ctx.beginPath(); ctx.moveTo(sx, groundY-120); ctx.lineTo(sx-40, groundY); ctx.lineTo(sx+40, groundY); ctx.fill();
+        });
+        ctx.fillStyle = '#111'; ctx.fillRect(0, groundY, canvas.width, 100);
+    }
+    if(boss) { ctx.fillStyle = 'gray'; ctx.fillRect(boss.x, boss.y, boss.w, boss.h); }
+    ctx.fillStyle = 'orange'; bags.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+    ctx.fillStyle = 'red'; spikes.forEach(s => ctx.fillRect(s.x, s.y, s.w, s.h));
+    ctx.fillStyle = '#0ff'; ctx.fillRect(player.x, player.y, player.w, player.h);
+    enemies.forEach(en => { ctx.fillStyle = en.c; ctx.fillRect(en.x, en.y, en.w, en.h); });
+}
+</script>
+</body>
+</html>
