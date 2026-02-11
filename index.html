@@ -1,216 +1,200 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Spy Jumper: Stage 2 Update</title>
+    <title>Garbage Man: Radio Fix</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { margin: 0; background: #05050a; overflow: hidden; font-family: 'Courier New', monospace; touch-action: none; color: white; }
-        canvas { display: block; border-bottom: 8px solid #111; }
-        .controls { position: absolute; bottom: 15px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; z-index: 20; }
-        .btn { width: 65px; height: 65px; background: rgba(255,255,255,0.2); border: 2px solid white; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; user-select: none; font-size: 11px; font-weight: bold; }
-        .btn:active { background: rgba(255,255,255,0.5); transform: scale(0.9); }
-        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 10px; border: 1px solid #0f0; font-size: 11px; z-index: 10; border-radius: 5px;}
-        input { background: #222; border: 1px solid #0f0; color: #0f0; width: 150px; font-size: 10px; padding: 5px; margin-bottom: 5px; outline: none; }
-        #stereo-play { background: #0a0; border: 2px solid #fff; color: white; padding: 10px; border-radius: 50%; font-size: 20px; cursor: pointer; display: inline-block; width: 40px; height: 40px; line-height: 20px; text-align: center; }
-        #game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.95); padding: 30px; border: 3px solid red; text-align: center; display: none; z-index: 100; border-radius: 15px; }
+        canvas { display: block; position: fixed; top: 0; left: 0; z-index: 1; }
+        
+        #title-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a1a; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #start-btn { background: #f00; color: white; border: 4px solid #fff; padding: 20px 40px; font-size: 24px; font-weight: bold; border-radius: 50px; cursor: pointer; }
+
+        /* COMPACT 3-LINE RADIO DASHBOARD */
+        #ui { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 8px; border: 1px solid #0f0; z-index: 30; border-radius: 8px; width: 210px; }
+        #radio-screen { width: 200px; height: 60px; background: #000; margin-top: 5px; border: 1px solid #444; overflow: hidden; }
+        .ui-stats { font-size: 11px; color: #0f0; margin-bottom: 2px; }
+        
+        .controls { position: fixed; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; z-index: 20; align-items: flex-end; pointer-events: none; }
+        .btn, #wheel-container { pointer-events: auto; }
+        #wheel-container { width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; }
+        #wheel { width: 110px; height: 110px; border: 8px solid #555; border-radius: 50%; position: relative; background: radial-gradient(circle, #111 25%, transparent 26%); }
+        #wheel::after { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 8px; background: #555; margin-top: -4px; }
+        .btn-group { display: flex; gap: 8px; }
+        .btn { width: 65px; height: 65px; background: rgba(255,255,255,0.1); border: 2px solid white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    <span id="stage-text" style="color:yellow; font-weight:bold">STAGE 1: SIDE SCROLL</span><br>
-    HP: <span id="hp" style="color: #0f0">100%</span> | SQUASHES: <span id="squash-count">0</span>/10<br>
-    GEAR: <span id="gear-text">NEUTRAL</span><br>
-    <input type="text" id="yt-url" placeholder="Playlist Link...">
-    <div id="stereo-play" onclick="loadRadio()">▶</div>
-    <div id="player" style="position: absolute; left: -9999px;"></div>
+<div id="title-screen">
+    <h1 style="color:#0f0; text-shadow: 0 0 20px #0f0;">GARBAGE MAN</h1>
+    <button id="start-btn" onclick="startGame()">IGNITION</button>
 </div>
 
-<div id="game-over">
-    <h1 id="status-title" style="color:red">WASTED</h1>
-    <button onclick="location.reload()" style="background:#0f0; padding:10px;">RESTART</button>
+<div id="ui">
+    <div class="ui-stats">STAGE: <span id="stg">1</span> | HP: <span id="hp">100</span>%</div>
+    <div class="ui-stats">SQUASHES: <span id="sq">0</span>/10</div>
+    <div id="radio-screen"><div id="yt-player"></div></div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
 
 <div class="controls">
-    <div style="display:flex; gap:10px;">
-        <div class="btn" id="left">LEFT</div>
-        <div class="btn" id="right">RIGHT</div>
-    </div>
-    <div style="display:flex; gap:8px;">
-        <div class="btn" id="drop" style="background:rgba(255,165,0,0.4)">DROP</div>
-        <div class="btn" id="jump" style="background:rgba(0,255,0,0.4)">JUMP</div>
-        <div class="btn" id="gas" style="background:rgba(255,0,0,0.4)">GAS</div>
+    <div id="wheel-container"><div id="wheel"></div></div>
+    <div class="btn-group">
+        <div class="btn" id="gas" style="background:rgba(255,0,0,0.5)">GAS</div>
+        <div class="btn" id="jump" style="background:rgba(0,255,0,0.5)">JUMP</div>
+        <div class="btn" id="drop" style="background:rgba(255,165,0,0.5)">DROP</div>
     </div>
 </div>
 
-<script src="https://www.youtube.com"></script>
+<script src="https://www.youtube.com/iframe_api"></script>
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
-canvas.height = 450;
+canvas.height = window.innerHeight;
 
-let stage = 1, health = 100, squashes = 0, gear = 0, isGameOver = false;
-let player = { x: 80, y: 350, w: 60, h: 25, dy: 0, speed: 0, targetSpeed: 0, jumped: false };
-let enemies = [], bags = [], items = [], buildings = [];
-let keys = { left: false, right: false };
-const gravity = 0.8;
-let spawnTimer = 0, bgCityX = 0;
+let stage = 1, health = 100, squashes = 0, gear = 0, gameStarted = false;
+let player = { x: canvas.width/2, y: 150, w: 60, h: 25, dy: 0, speed: 0, targetSpeed: 0 };
+let enemies = [], bags = [], buildings = [], streetLights = [], spikes = [];
+let spawnTimer = 0, bgCityX = 0, boss = null;
 
-// Setup Buildings with Windows
-for(let i=0; i<15; i++) {
-    buildings.push({ x: i*180, w: 80 + Math.random()*60, h: 150 + Math.random()*150, windows: Math.random() > 0.3 });
-}
-
-// Input Logic
-const setupBtn = (id) => {
-    const el = document.getElementById(id);
-    el.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        if(id === 'gas') { gear = (gear + 1) % 4; player.targetSpeed = gear * 4; }
-        if(id === 'jump' && stage === 1) doJump();
-        if(id === 'drop') dropBag();
-        if(id === 'left') keys.left = true;
-        if(id === 'right') keys.right = true;
-    });
-    el.addEventListener('touchend', (e) => {
-        if(id === 'left') keys.left = false;
-        if(id === 'right') keys.right = false;
-    });
-};
-['left', 'right', 'gas', 'jump', 'drop'].forEach(setupBtn);
-
-function doJump() { if(!player.jumped) { player.dy = -18; player.jumped = true; } }
-function dropBag() { 
-    let bSpeed = stage === 1 ? player.speed - 3 : -2;
-    bags.push({ x: player.x + (stage === 1 ? 0 : 20), y: player.y + 10, w: 15, h: 15, speed: bSpeed }); 
-}
-
-function loadRadio() {
-    const url = document.getElementById('yt-url').value;
-    const match = url.match(/[&?]list=([^&]+)/i);
-    if(match && window.ytPlayer) {
-        window.ytPlayer.unMute();
-        window.ytPlayer.loadPlaylist({list: match[1], listType: 'playlist'});
-    }
-}
+// PLAYLIST ID FROM YOUR LINK
+const PLAYLIST_ID = "PLVWEzQMtQoqNxUszzfO0k3lDy_UxddjYy";
 
 function onYouTubeIframeAPIReady() {
-    window.ytPlayer = new YT.Player('player', { height: '1', width: '1', playerVars: {'autoplay': 1}});
+    window.ytPlayer = new YT.Player('yt-player', {
+        height: '60', width: '200',
+        playerVars: {
+            'listType': 'playlist',
+            'list': PLAYLIST_ID,
+            'autoplay': 1,      // Request autoplay
+            'mute': 1,          // Start muted to bypass iOS lock
+            'playsinline': 1,    // Keep video in UI
+            'enablejsapi': 1
+        }
+    });
+}
+
+function startGame() {
+    document.getElementById('title-screen').style.display = 'none';
+    gameStarted = true;
+    
+    // ATTEMPT TO UNMUTE ON USER GESTURE
+    if(window.ytPlayer && window.ytPlayer.playVideo) {
+        window.ytPlayer.unMute();
+        window.ytPlayer.playVideo();
+        window.ytPlayer.setVolume(100);
+    }
+    update();
+}
+
+// Steering Logic
+const wheelCont = document.getElementById('wheel-container');
+const wheelEl = document.getElementById('wheel');
+wheelCont.addEventListener('touchmove', (e) => {
+    const rect = wheelCont.getBoundingClientRect();
+    const angle = Math.atan2(e.touches.clientY - (rect.top + 70), e.touches.clientX - (rect.left + 70));
+    wheelEl.style.transform = `rotate(${angle}rad)`;
+    player.x += Math.cos(angle) * 12;
+}, {passive: false});
+
+// Action Buttons
+const setupAction = (id) => {
+    document.getElementById(id).addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if(id === 'gas') { gear = (gear + 1) % 4; player.targetSpeed = gear * 8; }
+        if(id === 'jump' && stage !== 2) { if(!player.jumped){ player.dy = -22; player.jumped = true; } }
+        if(id === 'drop') bags.push({ x: player.x+20, y: player.y+(stage===2?60:10), w: 18, h: 18, vy: (stage===2?12:-4) });
+    });
+};
+['gas','jump','drop'].forEach(setupAction);
+
+// Setup City Elements
+for(let i=0; i<15; i++) {
+    buildings.push({ x: i*250, w: 100+Math.random()*60, h: 100+Math.random()*150 });
+    streetLights.push({ x: i*400 });
 }
 
 function update() {
-    if(isGameOver) return;
+    if(!gameStarted) return;
+    player.speed += (player.targetSpeed - player.speed) * 0.04;
+    player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+    const groundY = 320; 
 
-    // Smooth Acceleration
-    player.speed += (player.targetSpeed - player.speed) * 0.05;
-    if(keys.left) player.x -= 5;
-    if(keys.right) player.x += 5;
-    
-    document.getElementById('gear-text').innerText = ["NEUTRAL", "CRUISE", "FAST", "TURBO"][gear];
-
-    if(stage === 1) {
-        // Stage 1 Physics
+    if(stage === 1 || stage === 3) {
         player.y += player.dy;
-        if (player.y + player.h < 380) player.dy += gravity;
-        else { player.y = 380 - player.h; player.dy = 0; player.jumped = false; }
-        
+        if(player.y + player.h < groundY) player.dy += 1.0;
+        else { player.y = groundY - player.h; player.dy = 0; player.jumped = false; }
         bgCityX -= player.speed * 0.5;
 
-        if(++spawnTimer > 80) {
-            enemies.push({ x: canvas.width + 50, y: 350, w: 50, h: 30, c: '#f0f', spinning: false });
-            spawnTimer = 0;
+        if(stage === 3) {
+            if(!boss) boss = { x: canvas.width, y: 50, w: 120, h: 50, hp: 10, dir: -1 };
+            boss.x += (boss.dir * 3);
+            if(boss.x < 50 || boss.x > canvas.width - 150) boss.dir *= -1;
+            if(++spawnTimer > 100) { spikes.push({ x: boss.x + 50, y: boss.y + 50, w: 20, h: 20 }); spawnTimer = 0; }
+            bags.forEach((b, bi) => {
+                if(b.x < boss.x+boss.w && b.x+b.w > boss.x && b.y < boss.y+boss.h && b.y+b.h > 0) { boss.hp--; bags.splice(bi, 1); }
+            });
+        } else {
+            if(++spawnTimer > 75) { enemies.push({ x: canvas.width + 50, y: groundY - 30, w: 55, h: 30, c: '#f0f' }); spawnTimer = 0; }
         }
 
         enemies.forEach((en, i) => {
-            en.x -= (player.speed + 3);
+            en.x -= (player.speed + 4);
             if(player.x < en.x+en.w && player.x+player.w > en.x && player.y < en.y+en.h && player.y+player.h > en.y) {
-                if(player.dy > 0 && player.y + player.h < en.y + 15) {
-                    enemies.splice(i, 1); player.dy = -15; squashes++;
-                    if(squashes >= 10) startStage2();
-                } else { health -= 5; enemies.splice(i, 1); }
+                if(player.dy > 0 && player.y + player.h < en.y + 15) { enemies.splice(i, 1); player.dy = -20; squashes++; }
+                else { health -= 10; enemies.splice(i, 1); }
             }
         });
+        if(stage === 1 && squashes >= 10) { stage = 2; player.w = 30; player.h = 60; player.y = 200; enemies = []; }
     } else {
-        // Stage 2 Physics (Top Down)
-        player.y = 300; // Fixed Vertical in Top Down
-        if(++spawnTimer > 60) {
-            enemies.push({ x: player.x + (Math.random()*40 - 20), y: -50, w: 30, h: 50, c: 'white', cop: true });
-            spawnTimer = 0;
-        }
+        const enemyChaseSpeed = Math.max(0.5, 6 - (player.speed * 0.5));
+        if(++spawnTimer > 45) { enemies.push({ x: player.x + (Math.random()*100-50), y: canvas.height + 50, w: 30, h: 60, c: 'white' }); spawnTimer = 0; }
         enemies.forEach((en, i) => {
-            en.y += (player.speed + 2); // Cops chase from top
-            bags.forEach((bag, bi) => {
-                if(bag.x < en.x+en.w && bag.x+bag.w > en.x && bag.y < en.y+en.h && bag.y+bag.h > en.y) {
-                    enemies.splice(i, 1); bags.splice(bi, 1); squashes++;
-                    if(squashes >= 20) { document.getElementById('status-title').innerText = "STAGE CLEAR!"; endGame(); }
-                }
-            });
-            if(en.y > canvas.height) enemies.splice(i, 1);
+            en.y -= enemyChaseSpeed;
+            if(player.x < en.x+en.w && player.x+player.w > en.x && player.y < en.y+en.h && player.y+player.h > en.y) { health -= 10; enemies.splice(i, 1); }
+            bags.forEach((b, bi) => { if(b.x < en.x+en.w && b.x+b.w > en.x && b.y < en.y+en.h && b.y+b.h > en.y) { enemies.splice(i, 1); bags.splice(bi, 1); squashes++; } });
         });
+        if(squashes >= 20) { stage = 3; player.w = 60; player.h = 25; enemies = []; }
     }
 
-    bags.forEach((b, i) => { 
-        if(stage === 1) b.x -= (player.speed - b.speed);
-        else b.y -= 5; 
-    });
-
-    document.getElementById('hp').innerText = health + "%";
-    document.getElementById('squash-count').innerText = squashes;
-    if(health <= 0) endGame();
-    
+    bags.forEach((b, i) => { b.y += b.vy; if(stage !== 2) b.x -= player.speed; });
+    document.getElementById('hp').innerText = health;
+    document.getElementById('stg').innerText = stage;
+    document.getElementById('sq').innerText = squashes;
+    if(health <= 0) location.reload();
     draw();
     requestAnimationFrame(update);
 }
 
-function startStage2() {
-    stage = 2;
-    enemies = []; bags = [];
-    document.getElementById('stage-text').innerText = "STAGE 2: BIRD'S EYE CHASE";
-}
-
-function endGame() { isGameOver = true; document.getElementById('game-over').style.display = 'block'; }
-
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    if(stage === 1) {
-        // Draw City
+    const groundY = 320;
+    if(stage !== 2) {
         buildings.forEach(b => {
-            let bx = (b.x + bgCityX) % (buildings.length * 180);
-            if(bx < -200) bx += buildings.length * 180;
-            ctx.fillStyle = '#112';
-            ctx.fillRect(bx, canvas.height - b.h - 70, b.w, b.h);
-            // Windows
-            if(b.windows) {
-                ctx.fillStyle = '#ff0';
-                for(let r=0; r<b.h/20; r++) {
-                    for(let c=0; c<b.w/20; c++) {
-                        if((r+c) % 3 === 0) ctx.fillRect(bx+5+(c*20), (canvas.height - b.h - 60)+(r*20), 8, 8);
-                    }
-                }
-            }
+            let bx = (b.x + bgCityX) % (buildings.length * 250);
+            ctx.fillStyle = '#0a0a1a'; ctx.fillRect(bx, groundY - b.h, b.w, b.h);
         });
-        ctx.fillStyle = '#222'; ctx.fillRect(0, 380, canvas.width, 70); // Road
+        streetLights.forEach(sl => {
+            let sx = (sl.x + bgCityX) % (buildings.length * 250);
+            ctx.fillStyle = '#888'; ctx.fillRect(sx, groundY - 120, 4, 120);
+            ctx.fillStyle = 'rgba(255, 255, 100, 0.15)';
+            ctx.beginPath(); ctx.moveTo(sx, groundY-120); ctx.lineTo(sx-40, groundY); ctx.lineTo(sx+40, groundY); ctx.fill();
+        });
+        ctx.fillStyle = '#111'; ctx.fillRect(0, groundY, canvas.width, 100);
     } else {
-        // Stage 2 Road (Vertical scrolling lines)
-        ctx.fillStyle = '#333'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'yellow';
-        for(let i=0; i<10; i++) ctx.fillRect(canvas.width/2 - 5, (Date.now()/10 % 100) + (i*100), 10, 50);
+        ctx.fillStyle = '#151515'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        for(let i=0; i<10; i++) { ctx.fillStyle='#444'; ctx.fillRect(canvas.width/2-5, (Date.now()/5%100)+i*100, 10, 40); }
     }
 
-    // Common Objects
-    ctx.fillStyle = 'black'; bags.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+    if(boss) { ctx.fillStyle = 'gray'; ctx.fillRect(boss.x, boss.y, boss.w, boss.h); }
+    ctx.fillStyle = 'orange'; bags.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+    ctx.fillStyle = 'red'; spikes.forEach(s => ctx.fillRect(s.x, s.y, s.w, s.h));
     ctx.fillStyle = '#0ff'; ctx.fillRect(player.x, player.y, player.w, player.h);
-    enemies.forEach(en => {
-        ctx.fillStyle = en.c; ctx.fillRect(en.x, en.y, en.w, en.h);
-        if(en.cop && Date.now() % 400 < 200) { ctx.fillStyle='red'; ctx.fillRect(en.x, en.y-5, 10, 5); }
-    });
+    enemies.forEach(en => { ctx.fillStyle = en.c; ctx.fillRect(en.x, en.y, en.w, en.h); });
 }
-
-update();
 </script>
 </body>
 </html>
