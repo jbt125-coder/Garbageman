@@ -1,41 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Spy Jumper: Parallax Edition</title>
+    <title>Spy Jumper: Stage 2 Update</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { margin: 0; background: #0c0c14; overflow: hidden; font-family: 'Courier New', Courier, monospace; touch-action: none; color: white; }
+        body { margin: 0; background: #05050a; overflow: hidden; font-family: 'Courier New', monospace; touch-action: none; color: white; }
         canvas { display: block; border-bottom: 8px solid #111; }
-        
         .controls { position: absolute; bottom: 15px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; z-index: 20; }
         .btn { width: 65px; height: 65px; background: rgba(255,255,255,0.2); border: 2px solid white; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; user-select: none; font-size: 11px; font-weight: bold; }
         .btn:active { background: rgba(255,255,255,0.5); transform: scale(0.9); }
-        
-        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #0f0; font-size: 11px; z-index: 10; line-height: 1.4; border-radius: 5px;}
-        input { background: #222; border: 1px solid #0f0; color: #0f0; width: 180px; font-size: 10px; padding: 5px; margin-bottom: 5px; }
-        
-        #game-over { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            background: rgba(0,0,0,0.9); padding: 30px; border: 3px solid red; text-align: center; 
-            display: none; z-index: 100; 
-        }
-        button { background: #0f0; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 5px; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 10px; border: 1px solid #0f0; font-size: 11px; z-index: 10; border-radius: 5px;}
+        input { background: #222; border: 1px solid #0f0; color: #0f0; width: 150px; font-size: 10px; padding: 5px; margin-bottom: 5px; outline: none; }
+        #stereo-play { background: #0a0; border: 2px solid #fff; color: white; padding: 10px; border-radius: 50%; font-size: 20px; cursor: pointer; display: inline-block; width: 40px; height: 40px; line-height: 20px; text-align: center; }
+        #game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.95); padding: 30px; border: 3px solid red; text-align: center; display: none; z-index: 100; border-radius: 15px; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    HEALTH: <span id="hp" style="color: #0f0; font-weight: bold;">100%</span><br>
-    SCORE: <span id="score">0</span> | BEST: <span id="high">0</span><br>
-    <input type="text" id="yt-url" placeholder="Paste YouTube Playlist Link">
-    <button onclick="loadRadio()" style="padding: 2px 10px; font-size: 10px;">LOAD RADIO</button>
-    <div id="player" style="display:none"></div>
+    <span id="stage-text" style="color:yellow; font-weight:bold">STAGE 1: SIDE SCROLL</span><br>
+    HP: <span id="hp" style="color: #0f0">100%</span> | SQUASHES: <span id="squash-count">0</span>/10<br>
+    GEAR: <span id="gear-text">NEUTRAL</span><br>
+    <input type="text" id="yt-url" placeholder="Playlist Link...">
+    <div id="stereo-play" onclick="loadRadio()">▶</div>
+    <div id="player" style="position: absolute; left: -9999px;"></div>
 </div>
 
 <div id="game-over">
-    <h1 style="color:red">WASTED</h1>
-    <p>SCORE: <span id="final-score">0</span></p>
-    <button onclick="resetGame()">RESTART</button>
+    <h1 id="status-title" style="color:red">WASTED</h1>
+    <button onclick="location.reload()" style="background:#0f0; padding:10px;">RESTART</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -57,171 +50,166 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
-canvas.height = 400;
+canvas.height = 450;
 
-// Game State
-let score = 0, highScore = 0, health = 100, isGameOver = false;
-let player = { x: 80, y: 300, w: 60, h: 25, dy: 0, speed: 0, maxSpeed: 10, jumped: false };
-let enemies = [], bags = [], items = [];
-let keys = { gas: false, left: false, right: false };
+let stage = 1, health = 100, squashes = 0, gear = 0, isGameOver = false;
+let player = { x: 80, y: 350, w: 60, h: 25, dy: 0, speed: 0, targetSpeed: 0, jumped: false };
+let enemies = [], bags = [], items = [], buildings = [];
+let keys = { left: false, right: false };
 const gravity = 0.8;
-let spawnTimer = 0, itemTimer = 0;
+let spawnTimer = 0, bgCityX = 0;
 
-// Parallax offsets
-let bgCityX = 0, bgMidiX = 0;
+// Setup Buildings with Windows
+for(let i=0; i<15; i++) {
+    buildings.push({ x: i*180, w: 80 + Math.random()*60, h: 150 + Math.random()*150, windows: Math.random() > 0.3 });
+}
 
-// Improved Input
-const setupBtn = (id, key) => {
+// Input Logic
+const setupBtn = (id) => {
     const el = document.getElementById(id);
-    const start = (e) => { 
-        if(isGameOver) return; e.preventDefault(); 
-        if(id==='jump') doJump(); else if(id==='drop') dropBag(); else keys[key] = true; 
-    };
-    const end = (e) => { e.preventDefault(); if(key) keys[key] = false; };
-    el.addEventListener('touchstart', start, {passive: false});
-    el.addEventListener('touchend', end, {passive: false});
-    el.addEventListener('mousedown', start);
-    el.addEventListener('mouseup', end);
+    el.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if(id === 'gas') { gear = (gear + 1) % 4; player.targetSpeed = gear * 4; }
+        if(id === 'jump' && stage === 1) doJump();
+        if(id === 'drop') dropBag();
+        if(id === 'left') keys.left = true;
+        if(id === 'right') keys.right = true;
+    });
+    el.addEventListener('touchend', (e) => {
+        if(id === 'left') keys.left = false;
+        if(id === 'right') keys.right = false;
+    });
 };
-setupBtn('left', 'left'); setupBtn('right', 'right'); setupBtn('gas', 'gas'); setupBtn('jump', null); setupBtn('drop', null);
+['left', 'right', 'gas', 'jump', 'drop'].forEach(setupBtn);
 
-function doJump() { if (!player.jumped) { player.dy = -16; player.jumped = true; } }
-function dropBag() { bags.push({ x: player.x, y: player.y + 10, w: 15, h: 15, speed: player.speed - 3 }); }
+function doJump() { if(!player.jumped) { player.dy = -18; player.jumped = true; } }
+function dropBag() { 
+    let bSpeed = stage === 1 ? player.speed - 3 : -2;
+    bags.push({ x: player.x + (stage === 1 ? 0 : 20), y: player.y + 10, w: 15, h: 15, speed: bSpeed }); 
+}
 
 function loadRadio() {
     const url = document.getElementById('yt-url').value;
     const match = url.match(/[&?]list=([^&]+)/i);
-    if (match && window.ytPlayer) {
+    if(match && window.ytPlayer) {
+        window.ytPlayer.unMute();
         window.ytPlayer.loadPlaylist({list: match[1], listType: 'playlist'});
-        window.ytPlayer.playVideo();
     }
 }
-function onYouTubeIframeAPIReady() {
-    window.ytPlayer = new YT.Player('player', { height: '0', width: '0' });
-}
 
-function resetGame() {
-    score = 0; health = 100; isGameOver = false; enemies = []; bags = []; items = [];
-    player.x = 80; player.speed = 0;
-    document.getElementById('game-over').style.display = 'none';
-    update();
+function onYouTubeIframeAPIReady() {
+    window.ytPlayer = new YT.Player('player', { height: '1', width: '1', playerVars: {'autoplay': 1}});
 }
 
 function update() {
     if(isGameOver) return;
 
-    // Movement Physics
-    if (keys.gas) player.speed = Math.min(player.speed + 0.15, player.maxSpeed);
-    else player.speed = Math.max(player.speed - 0.2, 0);
-    if (keys.left) player.x = Math.max(player.x - 5, 0);
-    if (keys.right) player.x = Math.min(player.x + 5, canvas.width - player.w);
+    // Smooth Acceleration
+    player.speed += (player.targetSpeed - player.speed) * 0.05;
+    if(keys.left) player.x -= 5;
+    if(keys.right) player.x += 5;
+    
+    document.getElementById('gear-text').innerText = ["NEUTRAL", "CRUISE", "FAST", "TURBO"][gear];
 
-    // Parallax update
-    bgCityX -= player.speed * 0.1;
-    bgMidiX -= player.speed * 0.4;
+    if(stage === 1) {
+        // Stage 1 Physics
+        player.y += player.dy;
+        if (player.y + player.h < 380) player.dy += gravity;
+        else { player.y = 380 - player.h; player.dy = 0; player.jumped = false; }
+        
+        bgCityX -= player.speed * 0.5;
 
-    player.y += player.dy;
-    if (player.y + player.h < 350) player.dy += gravity;
-    else { player.y = 350 - player.h; player.dy = 0; player.jumped = false; }
-
-    // Spawning Enemies & Items
-    if(++spawnTimer > 100) {
-        const types = [{w:60, h:35, c:'#f0f'}, {w:30, h:40, c:'#ff0', bike:true}, {w:50, h:30, c:'white', cop:true}];
-        const t = types[Math.floor(Math.random()*types.length)];
-        enemies.push({ x: canvas.width + 100, y: 350 - t.h, ...t, spinning: false });
-        spawnTimer = 0;
-    }
-    if(++itemTimer > 800) { items.push({ x: canvas.width + 100, y: 200, w: 25, h: 25 }); itemTimer = 0; }
-
-    // Logic for Enemies
-    enemies.forEach((en, eIdx) => {
-        en.x -= (en.spinning ? player.speed : player.speed + 2.5);
-        if(en.spinning) en.y += 10;
-
-        if (player.x < en.x + en.w && player.x + player.w > en.x &&
-            player.y < en.y + en.h && player.y + player.h > en.y && !en.spinning) {
-            if (player.dy > 0 && (player.y + player.h) < (en.y + 15)) {
-                enemies.splice(eIdx, 1); player.dy = -12; score += 100;
-            } else {
-                health -= 10; enemies.splice(eIdx, 1);
-                if(health <= 0) endGame();
-            }
+        if(++spawnTimer > 80) {
+            enemies.push({ x: canvas.width + 50, y: 350, w: 50, h: 30, c: '#f0f', spinning: false });
+            spawnTimer = 0;
         }
-        bags.forEach((bag, bIdx) => {
-            if (bag.x < en.x + en.w && bag.x + bag.w > en.x &&
-                bag.y < en.y + en.h && bag.y + bag.h > en.y) {
-                en.spinning = true; bags.splice(bIdx, 1); score += 50;
+
+        enemies.forEach((en, i) => {
+            en.x -= (player.speed + 3);
+            if(player.x < en.x+en.w && player.x+player.w > en.x && player.y < en.y+en.h && player.y+player.h > en.y) {
+                if(player.dy > 0 && player.y + player.h < en.y + 15) {
+                    enemies.splice(i, 1); player.dy = -15; squashes++;
+                    if(squashes >= 10) startStage2();
+                } else { health -= 5; enemies.splice(i, 1); }
             }
         });
-    });
-
-    items.forEach((it, iIdx) => {
-        it.x -= player.speed;
-        if (player.x < it.x + it.w && player.x + player.w > it.x && player.y < it.y + it.h && player.y + player.h > it.y) {
-            health = Math.min(health + 50, 100); items.splice(iIdx, 1);
+    } else {
+        // Stage 2 Physics (Top Down)
+        player.y = 300; // Fixed Vertical in Top Down
+        if(++spawnTimer > 60) {
+            enemies.push({ x: player.x + (Math.random()*40 - 20), y: -50, w: 30, h: 50, c: 'white', cop: true });
+            spawnTimer = 0;
         }
+        enemies.forEach((en, i) => {
+            en.y += (player.speed + 2); // Cops chase from top
+            bags.forEach((bag, bi) => {
+                if(bag.x < en.x+en.w && bag.x+bag.w > en.x && bag.y < en.y+en.h && bag.y+bag.h > en.y) {
+                    enemies.splice(i, 1); bags.splice(bi, 1); squashes++;
+                    if(squashes >= 20) { document.getElementById('status-title').innerText = "STAGE CLEAR!"; endGame(); }
+                }
+            });
+            if(en.y > canvas.height) enemies.splice(i, 1);
+        });
+    }
+
+    bags.forEach((b, i) => { 
+        if(stage === 1) b.x -= (player.speed - b.speed);
+        else b.y -= 5; 
     });
 
-    enemies = enemies.filter(e => e.x > -200);
-    bags.forEach(b => b.x -= (player.speed - b.speed));
-    
-    document.getElementById('score').innerText = score;
     document.getElementById('hp').innerText = health + "%";
-    document.getElementById('hp').style.color = health < 30 ? "red" : "#0f0";
+    document.getElementById('squash-count').innerText = squashes;
+    if(health <= 0) endGame();
+    
     draw();
     requestAnimationFrame(update);
 }
 
-function endGame() {
-    isGameOver = true;
-    if(score > highScore) highScore = score;
-    document.getElementById('high').innerText = highScore;
-    document.getElementById('final-score').innerText = score;
-    document.getElementById('game-over').style.display = 'block';
+function startStage2() {
+    stage = 2;
+    enemies = []; bags = [];
+    document.getElementById('stage-text').innerText = "STAGE 2: BIRD'S EYE CHASE";
 }
+
+function endGame() { isGameOver = true; document.getElementById('game-over').style.display = 'block'; }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 1. Far Background (City)
-    ctx.fillStyle = '#1a1a2e';
-    for(let i=0; i<10; i++) {
-        let x = (bgCityX % 200) + (i*200);
-        ctx.fillRect(x, 150, 100, 200);
-        ctx.fillRect(x + 120, 180, 60, 170);
+    if(stage === 1) {
+        // Draw City
+        buildings.forEach(b => {
+            let bx = (b.x + bgCityX) % (buildings.length * 180);
+            if(bx < -200) bx += buildings.length * 180;
+            ctx.fillStyle = '#112';
+            ctx.fillRect(bx, canvas.height - b.h - 70, b.w, b.h);
+            // Windows
+            if(b.windows) {
+                ctx.fillStyle = '#ff0';
+                for(let r=0; r<b.h/20; r++) {
+                    for(let c=0; c<b.w/20; c++) {
+                        if((r+c) % 3 === 0) ctx.fillRect(bx+5+(c*20), (canvas.height - b.h - 60)+(r*20), 8, 8);
+                    }
+                }
+            }
+        });
+        ctx.fillStyle = '#222'; ctx.fillRect(0, 380, canvas.width, 70); // Road
+    } else {
+        // Stage 2 Road (Vertical scrolling lines)
+        ctx.fillStyle = '#333'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'yellow';
+        for(let i=0; i<10; i++) ctx.fillRect(canvas.width/2 - 5, (Date.now()/10 % 100) + (i*100), 10, 50);
     }
 
-    // 2. Mid Background (Fence/Poles)
-    ctx.fillStyle = '#252545';
-    for(let i=0; i<30; i++) {
-        let x = (bgMidiX % 100) + (i*100);
-        ctx.fillRect(x, 300, 5, 50); // Poles
-        ctx.fillRect(x, 310, 100, 2); // Wires
-    }
-
-    // 3. Road
-    ctx.fillStyle = '#111'; ctx.fillRect(0, 350, canvas.width, 50);
-    ctx.fillStyle = '#444'; ctx.fillRect(0, 350, canvas.width, 2); // Line
-
-    // 4. Game Objects
+    // Common Objects
     ctx.fillStyle = 'black'; bags.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
-    items.forEach(it => {
-        ctx.fillStyle = 'white'; ctx.fillRect(it.x, it.y, it.w, it.h);
-        ctx.fillStyle = 'red'; ctx.fillRect(it.x+10, it.y+4, 5, 17); ctx.fillRect(it.x+4, it.y+10, 17, 5);
-    });
-
-    // Player
     ctx.fillStyle = '#0ff'; ctx.fillRect(player.x, player.y, player.w, player.h);
-    
-    // Enemies
     enemies.forEach(en => {
-        ctx.fillStyle = en.spinning ? '#444' : en.c;
-        ctx.fillRect(en.x, en.y, en.w, en.h);
-        if(en.cop && !en.spinning && Date.now() % 400 < 200) {
-            ctx.fillStyle = 'red'; ctx.fillRect(en.x + 5, en.y - 5, 10, 5);
-        }
+        ctx.fillStyle = en.c; ctx.fillRect(en.x, en.y, en.w, en.h);
+        if(en.cop && Date.now() % 400 < 200) { ctx.fillStyle='red'; ctx.fillRect(en.x, en.y-5, 10, 5); }
     });
 }
+
 update();
 </script>
 </body>
