@@ -145,6 +145,7 @@ animateTitleScreen();
 
 // Mini game variables
 let miniGameActive = false;
+let miniGameStarted = false;
 let miniBags = [];
 let miniTruck = { x: 0, y: 0, w: 100, h: 40, vx: 3 };
 let miniMan = { x: 50, y: 0, w: 30, h: 50 };
@@ -158,13 +159,14 @@ function startMiniGame() {
     document.getElementById('title-screen').style.display = 'none';
     document.getElementById('minigame-screen').style.display = 'flex';
     miniGameActive = true;
+    miniGameStarted = false;
     
     miniCanvas.width = Math.min(600, window.innerWidth - 40);
     miniCanvas.height = Math.min(500, window.innerHeight - 200);
     
-    // Truck at top, swerving
+    // Truck at top, 20% lower than before
     miniTruck.x = miniCanvas.width / 2 - 50;
-    miniTruck.y = 30;
+    miniTruck.y = miniCanvas.height * 0.15; // 15% from top instead of near top
     miniTruck.w = 100;
     miniTruck.h = 40;
     miniTruck.vx = 3;
@@ -190,6 +192,10 @@ function startMiniGame() {
 
 miniCanvas.addEventListener('mousedown', (e) => {
     if(!miniGameActive) return;
+    if(!miniGameStarted) {
+        miniGameStarted = true;
+        return;
+    }
     charging = true;
     throwPower = 0;
 });
@@ -203,6 +209,10 @@ miniCanvas.addEventListener('mouseup', (e) => {
 miniCanvas.addEventListener('touchstart', (e) => {
     if(!miniGameActive) return;
     e.preventDefault();
+    if(!miniGameStarted) {
+        miniGameStarted = true;
+        return;
+    }
     charging = true;
     throwPower = 0;
 });
@@ -237,14 +247,38 @@ function throwBag() {
 function updateMiniGame() {
     if(!miniGameActive) return;
     
+    miniCtx.fillStyle = '#1a1a2e';
+    miniCtx.fillRect(0, 0, miniCanvas.width, miniCanvas.height);
+    
+    // Show startup message
+    if(!miniGameStarted) {
+        miniCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        miniCtx.fillRect(0, 0, miniCanvas.width, miniCanvas.height);
+        
+        miniCtx.fillStyle = '#f00';
+        miniCtx.font = 'bold 28px Arial';
+        miniCtx.textAlign = 'center';
+        miniCtx.fillText('YO MAN!', miniCanvas.width/2, miniCanvas.height/2 - 60);
+        
+        miniCtx.fillStyle = '#fff';
+        miniCtx.font = 'bold 22px Arial';
+        miniCtx.fillText("IT'S THE COPS!", miniCanvas.width/2, miniCanvas.height/2 - 20);
+        miniCtx.fillText("LOAD THE MONEY INTO", miniCanvas.width/2, miniCanvas.height/2 + 20);
+        miniCtx.fillText("THE GARBAGE TRUCK!!!", miniCanvas.width/2, miniCanvas.height/2 + 50);
+        
+        miniCtx.fillStyle = '#0f0';
+        miniCtx.font = 'bold 24px Arial';
+        miniCtx.fillText('TAP TO START', miniCanvas.width/2, miniCanvas.height/2 + 100);
+        
+        requestAnimationFrame(updateMiniGame);
+        return;
+    }
+    
     // Charge power when holding
     if(charging) {
         throwPower += 3;
         if(throwPower > 100) throwPower = 100;
     }
-    
-    miniCtx.fillStyle = '#1a1a2e';
-    miniCtx.fillRect(0, 0, miniCanvas.width, miniCanvas.height);
     
     // Ground
     miniCtx.fillStyle = '#2a2a3e';
